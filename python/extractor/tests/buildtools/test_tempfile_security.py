@@ -122,9 +122,9 @@ class TestAutoInstallCleanup(unittest.TestCase):
     @patch.object(Venv, 'pip')
     def test_pip_install_cleanup_on_success(self, mock_pip, mock_upgrade, mock_save):
         """Test that temp file is cleaned up on successful installation."""
-        # Setup mock
-        temp_file = tempfile.mktemp(suffix=".txt")
-        with open(temp_file, 'w') as f:
+        # Setup mock - use secure NamedTemporaryFile instead of deprecated mktemp
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode='w', delete=False) as f:
+            temp_file = f.name
             f.write("test")
         mock_save.return_value = temp_file
         
@@ -150,9 +150,9 @@ class TestAutoInstallCleanup(unittest.TestCase):
     @patch.object(Venv, 'pip')
     def test_pip_install_cleanup_on_exception(self, mock_pip, mock_upgrade, mock_save):
         """Test that temp file is cleaned up even when exception occurs."""
-        # Setup mock to raise exception
-        temp_file = tempfile.mktemp(suffix=".txt")
-        with open(temp_file, 'w') as f:
+        # Setup mock to raise exception - use secure NamedTemporaryFile instead of deprecated mktemp
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode='w', delete=False) as f:
+            temp_file = f.name
             f.write("test")
         mock_save.return_value = temp_file
         mock_pip.side_effect = Exception("Installation failed")

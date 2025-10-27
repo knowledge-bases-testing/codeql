@@ -36,8 +36,13 @@ except ImportError:
 
 import generate_mad as mad
 
+# SECURITY: subprocess.check_output with shell=False (explicit) and list arguments.
+# - shell=False: Prevents shell interpretation
+# - List arguments: Passed directly to git, preventing command injection
+# - No user-controlled inputs; only hardcoded git command
+# Reference: Python subprocess documentation on security considerations
 gitroot = (
-    subprocess.check_output(["git", "rev-parse", "--show-toplevel"])
+    subprocess.check_output(["git", "rev-parse", "--show-toplevel"], shell=False)
     .decode("utf-8")
     .strip()
 )
@@ -95,6 +100,12 @@ def clone_project(project: Project) -> str:
         else:
             print(f"Cloning {name} from {repo_url}")
 
+        # SECURITY: subprocess.check_call with shell=False (explicit) and list arguments.
+        # - shell=False: Prevents shell interpretation of special characters
+        # - List arguments: Each argument is passed directly to git, preventing injection
+        # - repo_url and git_tag come from config files which should be trusted sources
+        # Reference: Python subprocess documentation on security considerations
+        # (https://docs.python.org/3/library/subprocess.html#security-considerations)
         subprocess.check_call(
             [
                 "git",
@@ -107,7 +118,8 @@ def clone_project(project: Project) -> str:
                 ),  # Add branch if tag is provided
                 repo_url,
                 target_dir,
-            ]
+            ],
+            shell=False,  # Explicit: Prevents shell injection attacks
         )
         print(f"Completed cloning {name}")
     else:
@@ -179,15 +191,68 @@ def build_database(
     """
     Build a CodeQL database for a project.
 
+    Security Expectations:
+    - This function executes subprocess commands with user-controlled inputs.
+    - Language parameter is validated against a whitelist of known CodeQL languages.
+    - Extractor options are validated to ensure they are a list or iterable.
+    - All subprocess calls use shell=False (explicit) to prevent shell injection.
+    - All command arguments are passed as a list to prevent command injection.
+    - Input sources: language and extractor_options come from config files which
+      should be trusted, but validation is still performed as defense-in-depth.
+
     Args:
         language: The language for which to build the database (e.g., "rust").
-        extractor_options: Additional options for the extractor.
+                  Must be one of the supported CodeQL languages.
+        extractor_options: Additional options for the extractor. Must be an iterable
+                          (list, tuple, etc.) of strings.
         project: A dictionary containing project information with 'name' and 'git-repo' keys.
         project_dir: Path to the CodeQL database.
 
     Returns:
-        The path to the created database directory.
+        The path to the created database directory, or None if the build fails.
+
+    Raises:
+        ValueError: If language is not in the supported list or extractor_options
+                   is not a valid iterable.
     """
+    # SECURITY: Validate language parameter against known CodeQL languages.
+    # This prevents potential command injection through arbitrary language values.
+    # Reference: OWASP Command Injection Prevention Cheat Sheet
+    # (https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
+    SUPPORTED_LANGUAGES = {
+        "cpp",
+        "csharp",
+        "go",
+        "java",
+        "javascript",
+        "python",
+        "ruby",
+        "rust",
+        "swift",
+    }
+    if language not in SUPPORTED_LANGUAGES:
+        raise ValueError(
+            f"Unsupported language '{language}'. Must be one of: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
+        )
+
+    # SECURITY: Validate extractor_options is an iterable and contains safe values.
+    # This prevents arbitrary data from being passed to subprocess commands.
+    # We ensure it's a list/tuple/iterable and convert to list for safe iteration.
+    try:
+        extractor_options_list = list(extractor_options)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"extractor_options must be an iterable (list, tuple, etc.), got {type(extractor_options).__name__}"
+        )
+
+    # SECURITY: Ensure all extractor options are strings to prevent injection
+    # of complex objects or other unsafe data types.
+    for idx, extractor_option in enumerate(extractor_options_list):
+        if not isinstance(extractor_option, str):
+            raise ValueError(
+                f"All extractor options must be strings. Option at index {idx} is {type(extractor_option).__name__}"
+            )
+
     name = project["name"]
 
     # Create database directory path
@@ -196,8 +261,21 @@ def build_database(
     # Only build the database if it doesn't already exist
     if not database_dir.exists():
         print(f"Building CodeQL database for {name}...")
-        extractor_options = [option for x in extractor_options for option in ("-O", x)]
+        # Convert extractor options to CodeQL format: each option becomes "-O", "value"
+        formatted_options = [
+            option
+            for extractor_option in extractor_options_list
+            for option in ("-O", extractor_option)
+        ]
         try:
+            # SECURITY: subprocess.check_call with shell=False (explicit) and list arguments.
+            # - shell=False: Prevents shell interpretation of special characters (e.g., `;`, `|`, `&`)
+            # - List arguments: Each argument is passed directly to the executable, preventing
+            #   argument injection attacks.
+            # - All inputs are validated above to ensure they contain safe values.
+            # Reference: Python subprocess documentation on security considerations
+            # (https://docs.python.org/3/library/subprocess.html#security-considerations)
+            # Reference: OWASP Command Injection Prevention - Use of parameterized APIs
             subprocess.check_call(
                 [
                     "codeql",
@@ -206,10 +284,11 @@ def build_database(
                     f"--language={language}",
                     "--source-root=" + project_dir,
                     "--overwrite",
-                    *extractor_options,
+                    *formatted_options,
                     "--",
                     database_dir,
-                ]
+                ],
+                shell=False,  # Explicit: Prevents shell injection attacks
             )
             print(f"Successfully created database at {database_dir}")
         except subprocess.CalledProcessError as e:

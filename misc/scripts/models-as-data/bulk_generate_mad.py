@@ -43,6 +43,64 @@ gitroot = (
 )
 build_dir = pathlib.Path(gitroot, "mad-generation-build")
 
+# List of valid CodeQL languages to prevent command injection
+# Reference: https://docs.python.org/3/library/subprocess.html#security-considerations
+VALID_LANGUAGES = {
+    "cpp",
+    "csharp",
+    "go",
+    "java",
+    "javascript",
+    "python",
+    "ruby",
+    "rust",
+    "swift",
+}
+
+
+def validate_language(language: str) -> None:
+    """
+    Validate that the language is from a known safe list.
+
+    This is a security measure to prevent command injection attacks.
+    Reference: https://owasp.org/www-community/attacks/Command_Injection
+
+    Args:
+        language: The language identifier to validate
+
+    Raises:
+        ValueError: If the language is not in the valid list
+    """
+    if language not in VALID_LANGUAGES:
+        raise ValueError(
+            f"Invalid language '{language}'. Must be one of: {', '.join(sorted(VALID_LANGUAGES))}"
+        )
+
+
+def validate_extractor_options(extractor_options: list) -> None:
+    """
+    Validate that extractor options are safe to use in subprocess calls.
+
+    This is a security measure to prevent command injection attacks.
+    Reference: https://owasp.org/www-community/attacks/Command_Injection
+
+    Args:
+        extractor_options: List of extractor options to validate
+
+    Raises:
+        ValueError: If any option contains potentially dangerous characters
+    """
+    dangerous_chars = set(";&|<>`$(){}[]\\'\"\n")
+    for option in extractor_options:
+        if not isinstance(option, str):
+            raise ValueError(
+                f"Extractor option must be a string, got {type(option).__name__}"
+            )
+        if any(char in option for char in dangerous_chars):
+            raise ValueError(
+                f"Extractor option '{option}' contains potentially dangerous characters"
+            )
+
 
 # A project to generate models for
 Project = TypedDict(
@@ -95,6 +153,13 @@ def clone_project(project: Project) -> str:
         else:
             print(f"Cloning {name} from {repo_url}")
 
+        # Security: Always use shell=False (explicit) and pass arguments as a list
+        # to prevent shell injection attacks. This is critical even though we're
+        # already passing arguments as a list, as it makes the security posture explicit.
+        # References:
+        # - https://docs.python.org/3/library/subprocess.html#security-considerations
+        # - https://owasp.org/www-community/attacks/Command_Injection
+        # IMPORTANT: Keep shell=False for all subprocess calls to maintain security.
         subprocess.check_call(
             [
                 "git",
@@ -107,7 +172,8 @@ def clone_project(project: Project) -> str:
                 ),  # Add branch if tag is provided
                 repo_url,
                 target_dir,
-            ]
+            ],
+            shell=False,
         )
         print(f"Completed cloning {name}")
     else:
@@ -190,6 +256,14 @@ def build_database(
     """
     name = project["name"]
 
+    # Security: Validate language and extractor_options before using in subprocess
+    # to prevent command injection attacks.
+    # References:
+    # - https://docs.python.org/3/library/subprocess.html#security-considerations
+    # - https://owasp.org/www-community/attacks/Command_Injection
+    validate_language(language)
+    validate_extractor_options(extractor_options)
+
     # Create database directory path
     database_dir = build_dir / f"{name}-db"
 
@@ -198,6 +272,13 @@ def build_database(
         print(f"Building CodeQL database for {name}...")
         extractor_options = [option for x in extractor_options for option in ("-O", x)]
         try:
+            # Security: Always use shell=False (explicit) and pass arguments as a list
+            # to prevent shell injection attacks. This is critical even though we're
+            # already passing arguments as a list, as it makes the security posture explicit.
+            # References:
+            # - https://docs.python.org/3/library/subprocess.html#security-considerations
+            # - https://owasp.org/www-community/attacks/Command_Injection
+            # IMPORTANT: Keep shell=False for all subprocess calls to maintain security.
             subprocess.check_call(
                 [
                     "codeql",
@@ -209,7 +290,8 @@ def build_database(
                     *extractor_options,
                     "--",
                     database_dir,
-                ]
+                ],
+                shell=False,
             )
             print(f"Successfully created database at {database_dir}")
         except subprocess.CalledProcessError as e:
@@ -457,6 +539,13 @@ def main(config, args) -> None:
         sys.exit(1)
     language = config["language"]
 
+    # Security: Validate language early to prevent command injection
+    try:
+        validate_language(language)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
     # Create build directory if it doesn't exist
     build_dir.mkdir(parents=True, exist_ok=True)
 
@@ -464,6 +553,12 @@ def main(config, args) -> None:
     match get_strategy(config):
         case "repo":
             extractor_options = config.get("extractor_options", [])
+            # Security: Validate extractor_options early to prevent command injection
+            try:
+                validate_extractor_options(extractor_options)
+            except ValueError as e:
+                print(f"ERROR: {e}")
+                sys.exit(1)
             database_results = build_databases_from_projects(
                 language,
                 extractor_options,

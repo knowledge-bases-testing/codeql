@@ -90,7 +90,7 @@ def validate_extractor_options(extractor_options: list) -> None:
     Raises:
         ValueError: If any option contains potentially dangerous characters
     """
-    dangerous_chars = set(";&|<>`$(){}[]\\'\"\n")
+    dangerous_chars = set(";&|<>`$(){}[]\\'\"\n*")
     for option in extractor_options:
         if not isinstance(option, str):
             raise ValueError(
@@ -284,8 +284,10 @@ def build_database(
                     "codeql",
                     "database",
                     "create",
-                    f"--language={language}",
-                    "--source-root=" + project_dir,
+                    "--language",
+                    language,
+                    "--source-root",
+                    project_dir,
                     "--overwrite",
                     *extractor_options,
                     "--",

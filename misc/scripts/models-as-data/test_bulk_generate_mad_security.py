@@ -93,6 +93,7 @@ class TestExtractorOptionsValidation(unittest.TestCase):
             ["test{brace}"],
             ["test[bracket]"],
             ["test(paren)"],
+            ["test*glob"],
         ]
         for options in dangerous_options:
             with self.assertRaises(

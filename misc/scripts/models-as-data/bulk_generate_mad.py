@@ -3,6 +3,16 @@
 Experimental script for bulk generation of MaD models based on a list of projects.
 
 Note: This file must be formatted using the Black Python formatter.
+
+Security Requirements:
+- All subprocess.check_call invocations MUST use shell=False to prevent shell injection
+- Language parameter MUST be validated against VALID_LANGUAGES before use
+- Extractor options MUST be validated to reject shell metacharacters
+- These requirements are enforced by validate_language() and validate_extractor_options()
+
+References:
+- https://docs.python.org/3/library/subprocess.html#security-considerations
+- https://owasp.org/www-community/attacks/Command_Injection
 """
 
 import pathlib

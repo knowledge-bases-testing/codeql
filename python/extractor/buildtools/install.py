@@ -4,6 +4,7 @@ import subprocess
 import re
 import ast
 import tempfile
+import shutil
 
 from buildtools import unify_requirements
 from buildtools.version import executable
@@ -25,8 +26,11 @@ class Venv(object):
         self.venv_executable = os.path.join(self.path, *exe_ext)
         self._lib = None
         self.pip_upgraded = False
+        # Security fix for issue #2: Create temporary directory with mkdtemp() (secure)
+        # and ensure proper cleanup via cleanup() method or context manager
         self.empty_folder = tempfile.mkdtemp(prefix="empty", dir=os.environ["LGTM_WORKSPACE"])
         self.version = version
+        self._cleaned_up = False
 
     def create(self):
         if self.version < 3:
@@ -69,6 +73,38 @@ class Venv(object):
                 print('Error trying to run get_venv_lib (this is Python {})'.format(sys.version[:5]))
                 print_exception_indented()
         return self._lib
+
+    def cleanup(self):
+        """
+        Clean up temporary directory created in __init__.
+        Security fix for issue #2: Ensure temporary files/directories are properly
+        removed to prevent resource leaks and potential security issues.
+        """
+        if not self._cleaned_up and self.empty_folder and os.path.exists(self.empty_folder):
+            try:
+                shutil.rmtree(self.empty_folder)
+                self._cleaned_up = True
+            except (OSError, IOError) as e:
+                # Log error but don't fail - cleanup is best effort
+                print("Warning: Failed to cleanup temporary directory {}: {}".format(
+                    self.empty_folder, e))
+
+    def __enter__(self):
+        """Context manager entry - allows using Venv with 'with' statement."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures cleanup even if exception occurs."""
+        self.cleanup()
+        return False
+
+    def __del__(self):
+        """
+        Destructor to ensure cleanup if not explicitly called.
+        Note: __del__ is not guaranteed to be called, so prefer using
+        context manager or explicit cleanup() call.
+        """
+        self.cleanup()
 
 def venv_path():
     return os.path.join(os.environ["LGTM_WORKSPACE"], "venv")

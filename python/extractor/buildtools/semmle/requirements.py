@@ -31,7 +31,18 @@ def parse_file(filename):
         return parse(fd.read().splitlines())
 
 def save_to_file(reqs):
-    'Takes a list of requirements, saves them to a temporary file and returns the filename'
+    """
+    Takes a list of requirements, saves them to a temporary file and returns the filename.
+    
+    Security note (issue #2): This function creates a temporary file with delete=False,
+    which means the caller is responsible for cleaning it up using os.remove().
+    The file is created securely using tempfile.NamedTemporaryFile() which:
+    - Creates file with secure permissions (readable/writable only by creator)
+    - Uses mkstemp() internally to avoid race conditions
+    - Generates unpredictable filename to prevent attacks
+    
+    Callers MUST clean up the returned file path using try/finally or context managers.
+    """
     with tempfile.NamedTemporaryFile(prefix="semmle-requirements", suffix=".txt", mode="w", delete=False) as fd:
         for req in reqs:
             if req.url is None:

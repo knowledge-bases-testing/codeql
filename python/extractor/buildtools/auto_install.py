@@ -16,20 +16,25 @@ logging.basicConfig(level=logging.WARNING)
 
 def pip_install(req, venv, dependencies=True, wheel=True):
     venv.upgrade_pip()
+    # Security fix for issue #2: Use try/finally to ensure temp file cleanup
+    # even if exception occurs during installation
     tmp = requirements.save_to_file([req])
-    #Install the requirements using the venv python
-    args = [ "install", "-r", tmp]
-    if dependencies:
-        print("Installing %s with dependencies." % req)
-    elif wheel:
-        print("Installing %s without dependencies." % req)
-        args += [ "--no-deps"]
-    else:
-        print("Installing %s without dependencies or wheel." % req)
-        args += [ "--no-deps", "--no-binary", ":all:"]
-    print("Calling " + " ".join(args))
-    venv.pip(args)
-    os.remove(tmp)
+    try:
+        #Install the requirements using the venv python
+        args = [ "install", "-r", tmp]
+        if dependencies:
+            print("Installing %s with dependencies." % req)
+        elif wheel:
+            print("Installing %s without dependencies." % req)
+            args += [ "--no-deps"]
+        else:
+            print("Installing %s without dependencies or wheel." % req)
+            args += [ "--no-deps", "--no-binary", ":all:"]
+        print("Calling " + " ".join(args))
+        venv.pip(args)
+    finally:
+        # Ensure temp file is always cleaned up, preventing resource leaks
+        os.remove(tmp)
 
 def restrict_django(reqs):
     for req in reqs:

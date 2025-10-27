@@ -1,20 +1,16 @@
-from tempfile import mktemp
-import os
+from tempfile import NamedTemporaryFile
 
 def write_results1(results):
-    filename = mktemp()
-    with open(filename, "w+") as f:
+    with NamedTemporaryFile(mode="w+", delete=False) as f:
         f.write(results)
-    print("Results written to", filename)
+    print("Results written to", f.name)
 
 def write_results2(results):
-    filename = os.tempnam()
-    with open(filename, "w+") as f:
+    with NamedTemporaryFile(mode="w+", delete=False) as f:
         f.write(results)
-    print("Results written to", filename)
+    print("Results written to", f.name)
 
 def write_results3(results):
-    filename = os.tmpnam()
-    with open(filename, "w+") as f:
+    with NamedTemporaryFile(mode="w+", delete=False) as f:
         f.write(results)
-    print("Results written to", filename)
+    print("Results written to", f.name)

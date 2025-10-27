@@ -1,7 +1,6 @@
-from tempfile import mktemp
+from tempfile import NamedTemporaryFile
 
 def write_results(results):
-    filename = mktemp()
-    with open(filename, "w+") as f:
+    with NamedTemporaryFile(mode="w+", delete=False) as f:
         f.write(results)
-    print("Results written to", filename)
+    print("Results written to", f.name)

@@ -20,8 +20,8 @@ def write_results1(results):
 def write_results2(results):
     # Use NamedTemporaryFile instead of os.tempnam()
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-        f.write(results)
         filename = f.name
+        f.write(results)
     try:
         print("Results written to", filename)
     finally:

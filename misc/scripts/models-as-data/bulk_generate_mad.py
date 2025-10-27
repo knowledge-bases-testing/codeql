@@ -240,17 +240,17 @@ def build_database(
     # We ensure it's a list/tuple/iterable and convert to list for safe iteration.
     try:
         extractor_options_list = list(extractor_options)
-    except (TypeError, ValueError) as e:
+    except (TypeError, ValueError):
         raise ValueError(
-            f"extractor_options must be an iterable (list, tuple, etc.), got {type(extractor_options).__name__}: {e}"
+            f"extractor_options must be an iterable (list, tuple, etc.), got {type(extractor_options).__name__}"
         )
 
     # SECURITY: Ensure all extractor options are strings to prevent injection
     # of complex objects or other unsafe data types.
-    for idx, opt in enumerate(extractor_options_list):
-        if not isinstance(opt, str):
+    for idx, extractor_option in enumerate(extractor_options_list):
+        if not isinstance(extractor_option, str):
             raise ValueError(
-                f"All extractor options must be strings. Option at index {idx} is {type(opt).__name__}: {opt}"
+                f"All extractor options must be strings. Option at index {idx} is {type(extractor_option).__name__}"
             )
 
     name = project["name"]
@@ -263,7 +263,9 @@ def build_database(
         print(f"Building CodeQL database for {name}...")
         # Convert extractor options to CodeQL format: each option becomes "-O", "value"
         formatted_options = [
-            option for x in extractor_options_list for option in ("-O", x)
+            option
+            for extractor_option in extractor_options_list
+            for option in ("-O", extractor_option)
         ]
         try:
             # SECURITY: subprocess.check_call with shell=False (explicit) and list arguments.

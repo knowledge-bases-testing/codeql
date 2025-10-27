@@ -134,6 +134,8 @@ class TestAutoInstallCleanup(unittest.TestCase):
         
         # Create mock venv
         with patch.dict(os.environ, {"LGTM_WORKSPACE": tempfile.gettempdir()}):
+            # Note: mkdtemp() is secure (unlike deprecated mktemp()).
+            # It creates directories with mode 0700 and unpredictable names.
             venv = Venv(tempfile.mkdtemp(), 3)
             
             try:
@@ -163,6 +165,8 @@ class TestAutoInstallCleanup(unittest.TestCase):
         
         # Create mock venv
         with patch.dict(os.environ, {"LGTM_WORKSPACE": tempfile.gettempdir()}):
+            # Note: mkdtemp() is secure (unlike deprecated mktemp()).
+            # It creates directories with mode 0700 and unpredictable names.
             venv = Venv(tempfile.mkdtemp(), 3)
             
             try:

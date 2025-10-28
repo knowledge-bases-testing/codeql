@@ -6,6 +6,7 @@ Note: This file must be formatted using the Black Python formatter.
 """
 
 import pathlib
+import re
 import subprocess
 import sys
 from typing import Required, TypedDict, List, Callable, Optional
@@ -42,6 +43,88 @@ gitroot = (
     .strip()
 )
 build_dir = pathlib.Path(gitroot, "mad-generation-build")
+
+
+# Security: Define allowed CodeQL languages to prevent command injection
+# Reference: https://docs.python.org/3/library/subprocess.html#security-considerations
+# Reference: https://owasp.org/www-community/attacks/Command_Injection
+ALLOWED_LANGUAGES = frozenset(
+    ["cpp", "csharp", "go", "java", "javascript", "python", "ruby", "rust", "swift"]
+)
+
+
+def validate_language(language: str) -> None:
+    """
+    Validate that the language parameter is a known safe CodeQL language.
+
+    This validation prevents command injection by ensuring only whitelisted
+    language names are passed to subprocess calls.
+
+    Security considerations:
+    - Only allows alphanumeric characters (preventing shell metacharacters)
+    - Validates against a known set of CodeQL languages
+    - Raises ValueError for any invalid input
+
+    References:
+    - https://docs.python.org/3/library/subprocess.html#security-considerations
+    - https://owasp.org/www-community/attacks/Command_Injection
+
+    Args:
+        language: The language string to validate
+
+    Raises:
+        ValueError: If the language is not in the allowed set
+    """
+    if not language or language not in ALLOWED_LANGUAGES:
+        raise ValueError(
+            f"Invalid language: '{language}'. Must be one of: {', '.join(sorted(ALLOWED_LANGUAGES))}"
+        )
+
+
+def validate_extractor_options(extractor_options) -> None:
+    """
+    Validate that extractor_options contains only safe values.
+
+    This validation prevents command injection by ensuring extractor options
+    contain only simple key-value pairs without shell metacharacters.
+
+    Security considerations:
+    - Must be a list of strings
+    - Each string must contain only alphanumeric characters, underscores,
+      dashes, dots, forward slashes, colons, and equals signs
+    - Rejects any shell metacharacters (;, &, |, `, $, etc.)
+
+    References:
+    - https://docs.python.org/3/library/subprocess.html#security-considerations
+    - https://owasp.org/www-community/attacks/Command_Injection
+
+    Args:
+        extractor_options: The options to validate (expected to be a list of strings)
+
+    Raises:
+        ValueError: If extractor_options is not a list or contains invalid characters
+    """
+    if not isinstance(extractor_options, list):
+        raise ValueError(
+            f"extractor_options must be a list, got {type(extractor_options).__name__}"
+        )
+
+    # Pattern allows: alphanumeric, underscore, dash, dot, forward slash, colon, equals
+    # This is safe for key=value pairs and paths, but rejects shell metacharacters
+    safe_pattern = re.compile(r"^[a-zA-Z0-9_\-./=:]+$")
+
+    for option in extractor_options:
+        if not isinstance(option, str):
+            raise ValueError(
+                f"extractor_options must contain only strings, got {type(option).__name__} for value: {option}"
+            )
+        # Reject empty strings or strings with unsafe characters
+        if not option or not safe_pattern.match(option):
+            raise ValueError(
+                f"Invalid extractor option: '{option}'. "
+                f"Options must contain only alphanumeric characters, underscores, "
+                f"dashes, dots, forward slashes, colons, and equals signs."
+            )
 
 
 # A project to generate models for
@@ -107,7 +190,8 @@ def clone_project(project: Project) -> str:
                 ),  # Add branch if tag is provided
                 repo_url,
                 target_dir,
-            ]
+            ],
+            shell=False,  # Explicitly set to prevent shell injection
         )
         print(f"Completed cloning {name}")
     else:
@@ -179,6 +263,9 @@ def build_database(
     """
     Build a CodeQL database for a project.
 
+    Security: This function validates all user-controlled inputs before passing
+    them to subprocess.check_call to prevent command injection attacks.
+
     Args:
         language: The language for which to build the database (e.g., "rust").
         extractor_options: Additional options for the extractor.
@@ -187,7 +274,17 @@ def build_database(
 
     Returns:
         The path to the created database directory.
+
+    Raises:
+        ValueError: If language or extractor_options contain invalid values
     """
+    # Security: Validate inputs to prevent command injection
+    # References:
+    # - https://docs.python.org/3/library/subprocess.html#security-considerations
+    # - https://owasp.org/www-community/attacks/Command_Injection
+    validate_language(language)
+    validate_extractor_options(extractor_options)
+
     name = project["name"]
 
     # Create database directory path
@@ -198,6 +295,9 @@ def build_database(
         print(f"Building CodeQL database for {name}...")
         extractor_options = [option for x in extractor_options for option in ("-O", x)]
         try:
+            # Security: Using shell=False (default) and passing command as a list
+            # prevents shell injection attacks. All inputs are validated above.
+            # Reference: https://docs.python.org/3/library/subprocess.html#security-considerations
             subprocess.check_call(
                 [
                     "codeql",
@@ -209,7 +309,8 @@ def build_database(
                     *extractor_options,
                     "--",
                     database_dir,
-                ]
+                ],
+                shell=False,  # Explicitly set to prevent shell injection
             )
             print(f"Successfully created database at {database_dir}")
         except subprocess.CalledProcessError as e:

@@ -118,7 +118,8 @@ def validate_extractor_options(extractor_options) -> None:
             raise ValueError(
                 f"extractor_options must contain only strings, got {type(option).__name__} for value: {option}"
             )
-        if not safe_pattern.match(option):
+        # Reject empty strings or strings with unsafe characters
+        if not option or not safe_pattern.match(option):
             raise ValueError(
                 f"Invalid extractor option: '{option}'. "
                 f"Options must contain only alphanumeric characters, underscores, "

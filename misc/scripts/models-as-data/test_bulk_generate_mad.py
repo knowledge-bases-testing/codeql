@@ -93,6 +93,13 @@ class TestExtractorOptionsValidation:
         with pytest.raises(ValueError, match="must contain only strings"):
             validate_extractor_options(["valid", 123, "also-valid"])
 
+    def test_invalid_extractor_options_empty_string(self):
+        """Test that extractor options with empty strings are rejected."""
+        with pytest.raises(ValueError, match="Invalid extractor option"):
+            validate_extractor_options([""])
+        with pytest.raises(ValueError, match="Invalid extractor option"):
+            validate_extractor_options(["valid", "", "also-valid"])
+
     def test_valid_extractor_options_with_dots_and_slashes(self):
         """Test that extractor options with dots and forward slashes are accepted."""
         valid_options = [
